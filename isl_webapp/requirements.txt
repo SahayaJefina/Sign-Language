@@ -1,6 +1,6 @@
 flask
 opencv-python
-mediapipe==0.10.14
+mediapipe
 numpy<2
 scikit-learn
 ultralytics
