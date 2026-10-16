@@ -1,6 +1,5 @@
 flask
-opencv-python
-mediapipe
+gunicorn
+mediapipe==0.10.14
 numpy<2
-scikit-learn
-ultralytics
+scikit-learn==1.8.0

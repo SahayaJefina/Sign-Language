@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ISL Fingerspelling</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1a1d23; --muted: #6b7280;
+    --accent: #16a34a; --accent-text: #ffffff; --border: #e3e6ea; --stage: #0f1115;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12141a; --card: #1b1e26; --text: #eef0f4; --muted: #9aa1ad;
+      --accent: #22c55e; --accent-text: #08130c; --border: #2b2f3a; --stage: #000;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: .95rem; }
+  .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .stage { position: relative; background: var(--stage); border-radius: 10px; overflow: hidden; aspect-ratio: 4/3; }
+  .stage video, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .overlay-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #cbd0d8; text-align: center; padding: 20px; z-index: 2; }
+  .letter { position: absolute; left: 14px; top: 8px; z-index: 3; font-size: 4rem; font-weight: 700; color: #4ade80; text-shadow: 0 2px 8px rgba(0,0,0,.7); line-height: 1.1; }
+  .holdbar { position: absolute; left: 14px; right: 14px; bottom: 12px; height: 8px; background: rgba(255,255,255,.2); border-radius: 4px; z-index: 3; overflow: hidden; }
+  .holdbar > div { height: 100%; width: 0; background: #4ade80; }
+  .status { margin-top: 10px; color: var(--muted); font-size: .9rem; min-height: 1.3em; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin: 12px 0 4px; }
+  select, input[type=range] { width: 100%; }
+  select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: .95rem; }
+  .out {
+    min-height: 120px; border: 1px solid var(--border); border-radius: 10px; padding: 12px;
+    font-size: 1.6rem; letter-spacing: .04em; word-break: break-all; white-space: pre-wrap;
+    background: var(--bg);
+  }
+  .out .cursor { color: var(--accent); animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  button {
+    padding: 9px 14px; border-radius: 9px; border: 1px solid var(--border); background: var(--card);
+    color: var(--text); font-size: .9rem; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  .hint { color: var(--muted); font-size: .82rem; margin-top: 14px; line-height: 1.5; }
+  .sos { position: fixed; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center;
+    background: rgba(153, 27, 27, .96); color: #fff; text-align: center; padding: 24px; }
+  .sos.show { display: flex; }
+  .sos h2 { font-size: 3rem; margin: 0 0 8px; }
+  .sos .count { font-size: 5rem; font-weight: 800; margin: 8px 0 16px; }
+  .sos button, .sos a.btn { display: inline-block; margin: 6px; padding: 14px 24px; font-size: 1.1rem; border-radius: 10px;
+    border: 2px solid #fff; background: transparent; color: #fff; cursor: pointer; text-decoration: none; }
+  .sos a.btn { background: #fff; color: #991b1b; font-weight: 700; }
+  input[type=text] { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: .95rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ISL Fingerspelling</h1>
+  <p class="sub">Hold a sign steady in front of the camera to type its letter.</p>
+
+  <div class="grid">
+    <section class="card">
+      <div class="stage" id="stage">
+        <div class="overlay-msg" id="msg">Press “Start camera” to begin</div>
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="letter" id="letter"></div>
+        <div class="holdbar"><div id="hold"></div></div>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="row">
+        <button class="primary" id="startBtn">Start camera</button>
+        <button id="stopBtn" disabled>Stop</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="out" id="out"><span class="cursor">|</span></div>
+      <div class="row">
+        <button id="spaceBtn">Space</button>
+        <button id="delBtn">⌫ Delete</button>
+        <button id="clearBtn">Clear</button>
+        <button id="copyBtn">Copy</button>
+        <button id="speakBtn">Speak</button>
+      </div>
+
+      <label for="model">Model</label>
+      <select id="model"></select>
+
+      <label for="holdTime">Hold time: <span id="holdVal">0.4</span> s</label>
+      <input type="range" id="holdTime" min="0.2" max="2" step="0.1" value="0.4">
+
+      <label for="sosNum">Emergency number to call when “SOS” is typed</label>
+      <input type="text" id="sosNum" value="112" inputmode="tel">
+
+      <div class="hint">
+        Remove your hand from view (or relax it) between letters so the same letter can be typed twice.
+        The landmark model can also use its own “space” and “del” signs if you trained them.
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="sos" id="sos" role="alertdialog" aria-live="assertive">
+  <div>
+    <h2>SOS detected</h2>
+    <div>Calling emergency services in</div>
+    <div class="count" id="sosCount">5</div>
+    <a class="btn" id="sosCall" href="tel:112">Call now</a>
+    <button id="sosCancel">Cancel (false alarm)</button>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const video = $("video"), overlay = $("overlay"), octx = overlay.getContext("2d");
+const grab = document.createElement("canvas"), gctx = grab.getContext("2d");
+
+const MIN_CONF = { yolo: 0.5, landmarks: 0.6 };   // same thresholds as the Python scripts
+const REARM_MS = 300, DEL_REPEAT_MS = 700, SMOOTH_N = 5, SMOOTH_MIN = 3;
+const FRAME_W = 640;   // full camera width, as in the desktop scripts
+
+let stream = null, running = false, text = "";
+let recent = [];
+let logic = newLogic();
+
+function newLogic() {
+  return { streak: null, streakStart: null, idleStart: null, armed: true, lastTyped: null, lastCommit: 0 };
+}
+
+function render() {
+  $("out").innerHTML = "";
+  $("out").append(document.createTextNode(text));
+  const c = document.createElement("span"); c.className = "cursor"; c.textContent = "|";
+  $("out").append(c);
+}
+
+function applyTyped(t) {
+  if (sosActive) return;                 // ignore typing while the SOS countdown is showing
+  if (t === "space") text += " ";
+  else if (t === "del") text = text.slice(0, -1);
+  else text += t.toUpperCase();
+  render();
+  if (/(^|\s)SOS$/.test(text)) startSOS();
+}
+
+// ---- SOS: confirm with a short countdown, then open the phone dialer ----
+let sosActive = false, sosTimer = null;
+function beep() {
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(); o.frequency.value = 880; o.connect(ac.destination);
+    o.start(); setTimeout(() => { o.stop(); ac.close(); }, 200);
+  } catch (e) {}
+}
+function dialNumber() {
+  const n = ($("sosNum").value || "112").replace(/[^0-9+]/g, "") || "112";
+  return n;
+}
+function startSOS() {
+  sosActive = true;
+  let left = 5;
+  $("sosCount").textContent = left;
+  $("sosCall").href = "tel:" + dialNumber();
+  $("sos").classList.add("show");
+  beep();
+  sosTimer = setInterval(() => {
+    left -= 1; $("sosCount").textContent = Math.max(left, 0); beep();
+    if (left <= 0) { clearInterval(sosTimer); window.location.href = "tel:" + dialNumber(); }
+  }, 1000);
+}
+function cancelSOS() {
+  clearInterval(sosTimer); sosActive = false;
+  $("sos").classList.remove("show");
+  text = text.replace(/SOS$/, ""); render();   // remove the trigger so it does not fire again
+}
+$("sosCancel").onclick = cancelSOS;
+
+// ---- "Signal for Help" hand sign: open palm with thumb tucked (sos1), then fingers fold over the thumb (sos2) ----
+// A single-frame classifier cannot see motion, so the two poses are recorded as two classes ("sos1", "sos2")
+// and the SOS fires when sos2 is seen right after sos1.
+const sosHits = { sos1: [], sos2: [] };
+let sosArmedAt = null;
+function sosSequence(label, now) {
+  if (sosActive) return;
+  for (const k in sosHits) sosHits[k] = sosHits[k].filter(t => now - t < 3000);
+  if (label && label in sosHits) sosHits[label].push(now);
+  if (sosArmedAt === null && sosHits.sos1.length >= 3) sosArmedAt = now;
+  if (sosArmedAt !== null) {
+    if (now - sosArmedAt > 3000) { sosArmedAt = null; return; }   // took too long, start over
+    if (sosHits.sos2.filter(t => t > sosArmedAt).length >= 3) {
+      sosArmedAt = null; sosHits.sos1 = []; sosHits.sos2 = [];
+      startSOS();
+    }
+  }
+}
+
+// Decide when a steadily held sign should be typed (port of TypingLogic in isl_typer.py)
+function update(label, now, holdMs) {
+  const L = logic;
+  if (label === null || label !== L.streak) {
+    L.streak = label; L.streakStart = label ? now : null;
+  }
+  if (label === null) {
+    if (L.idleStart === null) L.idleStart = now;
+    if (now - L.idleStart >= REARM_MS) L.armed = true;
+    return null;
+  }
+  L.idleStart = null;
+  if (now - L.streakStart < holdMs) return null;
+  const repeat = label === "del" && now - L.lastCommit >= DEL_REPEAT_MS;
+  if (L.armed || label !== L.lastTyped || repeat) {
+    L.armed = false; L.lastTyped = label; L.lastCommit = now;
+    return label;
+  }
+  return null;
+}
+
+function smooth(raw) {
+  recent.push(raw); if (recent.length > SMOOTH_N) recent.shift();
+  const counts = {};
+  for (const r of recent) if (r) counts[r] = (counts[r] || 0) + 1;
+  let best = null, n = 0;
+  for (const k in counts) if (counts[k] > n) { best = k; n = counts[k]; }
+  return n >= SMOOTH_MIN ? best : null;
+}
+
+function drawBox(box) {
+  overlay.width = video.videoWidth; overlay.height = video.videoHeight;
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  if (!box) return;
+  octx.strokeStyle = "#4ade80"; octx.lineWidth = 3;
+  const [x1, y1, x2, y2] = box;
+  octx.strokeRect(x1 * overlay.width, y1 * overlay.height, (x2 - x1) * overlay.width, (y2 - y1) * overlay.height);
+}
+
+async function loop() {
+  while (running) {
+    const t0 = performance.now();
+    let raw = null, sosRaw = null, box = null, info = "no hand";
+    try {
+      const scale = FRAME_W / video.videoWidth;
+      grab.width = FRAME_W; grab.height = Math.round(video.videoHeight * scale);
+      gctx.drawImage(video, 0, 0, grab.width, grab.height);
+      const modelId = $("model").value;
+      const resp = await fetch("/predict", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: grab.toDataURL("image/jpeg", 0.95), model: modelId })
+      });
+      const d = await resp.json();
+      if (d.hand) {
+        box = d.box;
+        info = d.label ? `sees: ${d.label.toUpperCase()} ${Math.round(d.conf * 100)}%` : "hand found";
+        if (d.label && d.conf >= MIN_CONF[modelId] && d.label !== "rest") {
+          if (d.label.startsWith("sos")) sosRaw = d.label;   // SOS hand-signal poses are never typed as letters
+          else raw = d.label;
+        }
+      }
+    } catch (e) {
+      info = "server not reachable";
+    }
+    if (!running) break;
+
+    const label = smooth(raw);
+    const now = performance.now();
+    sosSequence(sosRaw, now);
+    const holdMs = parseFloat($("holdTime").value) * 1000;
+    const typed = update(label, now, holdMs);
+    if (typed) applyTyped(typed);
+
+    drawBox(box);
+    $("letter").textContent = label ? label.toUpperCase() : "";
+    const held = logic.streakStart ? Math.min((now - logic.streakStart) / holdMs, 1) : 0;
+    $("hold").style.width = (label ? held * 100 : 0) + "%";
+    $("status").textContent = info;
+
+    const wait = 80 - (performance.now() - t0);   // aim for ~12 requests per second at most
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  }
+}
+
+async function start() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+  } catch (e) {
+    $("msg").textContent = "Could not open the camera. Allow camera access and try again.";
+    return;
+  }
+  video.srcObject = stream;
+  await new Promise(r => video.onloadedmetadata = r);
+  $("msg").style.display = "none";
+  $("startBtn").disabled = true; $("stopBtn").disabled = false;
+  recent = []; logic = newLogic(); running = true;
+  loop();
+}
+
+function stop() {
+  running = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  video.srcObject = null; octx.clearRect(0, 0, overlay.width, overlay.height);
+  $("msg").textContent = "Camera stopped"; $("msg").style.display = "flex";
+  $("letter").textContent = ""; $("hold").style.width = "0"; $("status").textContent = "";
+  $("startBtn").disabled = false; $("stopBtn").disabled = true;
+}
+
+$("startBtn").onclick = start;
+$("stopBtn").onclick = stop;
+$("spaceBtn").onclick = () => applyTyped("space");
+$("delBtn").onclick = () => applyTyped("del");
+$("clearBtn").onclick = () => { text = ""; render(); };
+$("copyBtn").onclick = async () => {
+  try { await navigator.clipboard.writeText(text); $("copyBtn").textContent = "Copied"; }
+  catch (e) { $("copyBtn").textContent = "Copy failed"; }
+  setTimeout(() => $("copyBtn").textContent = "Copy", 1200);
+};
+$("speakBtn").onclick = () => { if (text.trim()) speechSynthesis.speak(new SpeechSynthesisUtterance(text)); };
+$("holdTime").oninput = e => $("holdVal").textContent = parseFloat(e.target.value).toFixed(1);
+$("model").onchange = () => { recent = []; logic = newLogic(); };
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Backspace") applyTyped("del");
+});
+
+fetch("/info").then(r => r.json()).then(d => {
+  for (const m of d.models) {
+    const o = document.createElement("option"); o.value = m.id; o.textContent = m.label;
+    $("model").append(o);
+  }
+});
+render();
+</script>
+</body>
+</html>

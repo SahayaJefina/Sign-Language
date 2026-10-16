@@ -5,7 +5,8 @@ The browser opens your webcam and sends small frames to this server. The server 
 with MediaPipe, classifies it with your trained model, and sends the letter back. The browser
 turns held signs into text.
 
-Run:   python app.py        then open  http://localhost:5000
+Run locally:  python app.py   then open http://localhost:5000
+On Render:    gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
 Needs (same folder): best.pt (YOLO model)  and/or  isl_model.pkl + isl_typer.py (landmark model)
 """
 import base64
@@ -33,10 +34,12 @@ models = {}   # name -> dict(predict=callable)
 def load_models():
     yolo_path = os.path.join(HERE, "best.pt")
     if os.path.exists(yolo_path):
-        from ultralytics import YOLO
-        yolo = YOLO(yolo_path)
-        models["yolo"] = {"label": "YOLO (image crop)", "obj": yolo}
-        print("Loaded YOLO model")
+        try:
+            from ultralytics import YOLO
+            models["yolo"] = {"label": "YOLO (image crop)", "obj": YOLO(yolo_path)}
+            print("Loaded YOLO model")
+        except ImportError:
+            print("ultralytics not installed, skipping best.pt")
 
     pkl_path = os.path.join(HERE, "isl_model.pkl")
     if os.path.exists(pkl_path) and os.path.exists(os.path.join(HERE, "isl_typer.py")):
@@ -119,6 +122,8 @@ def predict():
                    box=[x1 / w, y1 / h, x2 / w, y2 / h])
 
 
+load_models()   # runs on import, so gunicorn (app:app) works as well as "python app.py"
+
 if __name__ == "__main__":
-    load_models()
-    app.run(host="127.0.0.1", port=5000, threaded=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0" if "PORT" in os.environ else "127.0.0.1", port=port, threaded=True)
